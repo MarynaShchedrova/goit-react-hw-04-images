@@ -1,87 +1,86 @@
 import { useState, useEffect } from 'react';
+import { fetchImages } from '../api/fetchImages';
 import { Searchbar } from './Searchbar/Searchbar';
-import { fetchImages } from './api/fetchImages';
+import { Loader } from './Loader/Loader';
 import { ImageGallery } from './ImageGallery/ImageGallery';
 import { Button } from './Button/Button';
-import { Loader } from './Loader/Loader';
 import { Modal } from './Modal/Modal';
-import React from 'react';
 
 export const App = () => {
+  const [searchQuery, setSearchQuery] = useState('');
   const [images, setImages] = useState([]);
+  const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentSearch, setCurrentSearch] = useState('');
-  const [pageNr, setPageNr] = useState(1);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalImg, setModalImg] = useState('');
-  const [modalAlt, setModalAlt] = useState('');
-
-  const handleSubmit = async e => {
-    e.preventDefault();
-    setIsLoading({ isLoading: true });
-    const inputForSearch = e.target.elements.inputForSearch;
-    if (inputForSearch.value.trim() === '') {
-      return;
-    }
-    const response = await fetchImages(inputForSearch.value, 1);
-    setImages(response);
-    setIsLoading(false);
-    setCurrentSearch(inputForSearch.value);
-    setPageNr(2);
-  };
-
-  const handleClickMore = async () => {
-    setIsLoading({ isLoading: true });
-    const response = await fetchImages(currentSearch, pageNr);
-    setImages([...images, ...response]);
-    setIsLoading(false);
-    setPageNr(pageNr + 1);
-  };
-
-  const handleImageClick = e => {
-    setModalOpen(true);
-    setModalAlt(e.target.alt);
-    setModalImg(e.target.name);
-  };
-
-  const handleModalClose = () => {
-    setModalOpen(false);
-    setModalImg('');
-    setModalAlt('');
-  };
+  const [loadMore, setLoadMore] = useState(false);
+  const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [largeImageURL, setLargeImageURL] = useState('');
+  // const [id, setId] = useState(null);
+  const per_page = 12;
 
   useEffect(() => {
-    const handleKeyDown = event => {
-      if (event.code === 'Escape') {
-        handleModalClose();
+    getImages(searchQuery, page);
+  }, [searchQuery, page]);
+
+  const getImages = async (searchQuery, page) => {
+    if (!searchQuery) {
+      return;
+    }
+    setIsLoading(true);
+
+    try {
+      const { hits, totalHits } = await fetchImages(searchQuery, page);
+      if (hits.length === 0) {
+        return alert('Sorry, nothing found');
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-  }, []);
+      console.log(hits, totalHits);
+      setImages(prevImages => [...prevImages, ...hits]);
+      setLoadMore(page < Math.ceil(totalHits / per_page));
+    } catch (error) {
+      setError({ error });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const formSubmit = searchQuery => {
+    setSearchQuery(searchQuery);
+    setImages([]);
+    setPage(1);
+    setLoadMore(false);
+  };
+
+  const onloadMore = () => {
+    setIsLoading(true);
+    setPage(prevPage => prevPage + 1);
+  };
+
+  const openModal = largeImageURL => {
+    console.log(largeImageURL);
+    setShowModal(true);
+    setLargeImageURL(largeImageURL);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+  };
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr',
-        gridGap: '16px',
-        paddingBottom: '24px',
-      }}
-    >
-      {isLoading && pageNr === 1 ? (
+    <>
+      <Searchbar onSubmit={formSubmit} />
+      {isLoading ? (
         <Loader />
       ) : (
-        <React.Fragment>
-          <Searchbar onSubmit={handleSubmit} />
-          <ImageGallery onImageClick={handleImageClick} images={images} />
-
-          {isLoading && pageNr >= 2 ? <Loader /> : null}
-          {images.length > 0 ? <Button onClick={handleClickMore} /> : null}
-        </React.Fragment>
+        <ImageGallery images={images} openModal={openModal} />
       )}
-      {modalOpen ? (
-        <Modal src={modalImg} alt={modalAlt} handleClose={handleModalClose} />
-      ) : null}
-    </div>
+      {error && <p>something went wrong</p>}
+
+      {loadMore && <Button onloadMore={onloadMore} page={page} />}
+
+      {showModal && (
+        <Modal largeImageURL={largeImageURL} onClose={closeModal} />
+      )}
+    </>
   );
+  // }
 };
